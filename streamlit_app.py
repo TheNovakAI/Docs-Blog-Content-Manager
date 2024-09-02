@@ -1,7 +1,8 @@
 import streamlit as st
 from github import Github
 from streamlit_ace import st_ace
-import yaml
+import json
+import re
 
 # Load secrets
 GITHUB_TOKEN = st.secrets["GITHUB_TOKEN"]
@@ -49,13 +50,29 @@ def load_file_content(file_path):
     file_content = repo.get_contents(file_path, ref=BRANCH_NAME)
     return file_content.decoded_content.decode()
 
-def parse_yaml_content(content):
-    """Safely parse YAML content."""
-    try:
-        return yaml.safe_load(content)
-    except yaml.YAMLError as e:
-        st.error(f"YAML Parsing Error: {e}")
+def extract_config(js_content):
+    """Extract the JSON-like configuration object from the JavaScript file."""
+    config_match = re.search(r"export\s+default\s+defineConfig\((\{.*?\})\);", js_content, re.DOTALL)
+    if config_match:
+        config_json_str = config_match.group(1)
+        # Convert to valid JSON format
+        config_json_str = config_json_str.replace("'", '"')
+        config_json_str = re.sub(r"(\w+):", r'"\1":', config_json_str)  # Convert keys to string format
+        try:
+            config_data = json.loads(config_json_str)
+            return config_data
+        except json.JSONDecodeError as e:
+            st.error(f"JSON Decoding Error: {e}")
+            return None
+    else:
+        st.error("No valid config found in the JavaScript file.")
         return None
+
+def update_config_file(js_content, new_config):
+    """Update the JavaScript file with the new configuration."""
+    new_config_str = json.dumps(new_config, indent=2)
+    new_js_content = re.sub(r"(export\s+default\s+defineConfig\()\{.*?\}(\);)", fr"\1{new_config_str}\2", js_content, flags=re.DOTALL)
+    return new_js_content
 
 def update_file_content(file_path, new_content, commit_message="Update content"):
     """Update the content of a file in the GitHub repo."""
@@ -87,40 +104,14 @@ def display_sidebar_structure(integrations, files, selected_file):
                             st.session_state['selected_file'] = file_path
                             selected_file[0] = file_path
 
-def update_config_file(files):
-    """Update the Astro config file based on the current file structure."""
-    config_content = load_file_content(CONFIG_PATH)
-    config_data = parse_yaml_content(config_content)
-    
-    if not config_data:
-        return  # If parsing fails, stop further execution
-
-    # Update sidebar structure in the config
-    new_sidebar_structure = []
-    for file in files:
-        if file["type"] == "dir":
-            new_sidebar_structure.append({
-                "label": file["name"].replace("-", " ").title(),
-                "items": [{"label": f"{child['name'].replace('-', ' ').title()}", "link": f"/{child['path'].replace(BLOG_PATH, '').replace('.md', '')}"} for child in file["children"] if child["type"] == "file"]
-            })
-
-    # Find the starlight configuration and update the sidebar
-    for integration in config_data.get('integrations', []):
-        if 'starlight' in integration:
-            integration['starlight']['sidebar'] = new_sidebar_structure
-
-    # Convert updated config data back to YAML
-    new_config_content = yaml.dump(config_data)
-    update_file_content(CONFIG_PATH, new_config_content, "Updated astro.config.mjs with new sidebar structure")
-
 def manage_blog_posts():
     """Manage blog posts: add new or delete existing."""
     st.sidebar.subheader("Blog Post Management")
     files = list_files_in_folder(BLOG_PATH)
     selected_file = [st.session_state.get('selected_file')]
 
-    config_content = load_file_content(CONFIG_PATH)
-    config_data = parse_yaml_content(config_content)
+    js_content = load_file_content(CONFIG_PATH)
+    config_data = extract_config(js_content)
     
     if config_data:
         display_sidebar_structure(config_data.get('integrations', []), files, selected_file)
@@ -137,26 +128,21 @@ def manage_blog_posts():
             repo.create_file(new_blog_path, "Add new blog post", new_blog_content)
             st.success(f"New blog post {new_blog_name} created successfully.")
             files.append({"type": "file", "path": new_blog_path, "name": new_blog_name})
-            update_config_file(files)
+            updated_js_content = update_config_file(js_content, config_data)
+            update_file_content(CONFIG_PATH, updated_js_content, "Updated astro.config.mjs with new sidebar structure")
 
 def manage_config():
     """Manage the Astro config file to adjust sidebar and blog settings."""
     st.sidebar.subheader("Config File Management")
-    config_content = load_file_content(CONFIG_PATH)
+    js_content = load_file_content(CONFIG_PATH)
     
     # Display config content in the editor
     st.subheader("Editing Config File")
-    new_config_content = st_ace(value=config_content, language='javascript', theme='github', auto_update=True)
+    new_js_content = st_ace(value=js_content, language='javascript', theme='github', auto_update=True)
     
     if st.button("Save Config Changes"):
-        update_file_content(CONFIG_PATH, new_config_content, "Updated astro.config.mjs")
+        update_file_content(CONFIG_PATH, new_js_content, "Updated astro.config.mjs")
         st.success("Config file updated successfully!")
-    
-    # Parse and display a visual representation of the config (for example, a sidebar preview)
-    config_data = parse_yaml_content(new_config_content)
-    if config_data:
-        st.sidebar.markdown("### Sidebar Preview")
-        display_sidebar_structure(config_data.get('integrations', []), [], [])
 
 def main():
     st.title("THE Novak AI - Custom CMS")
