@@ -9,7 +9,7 @@ GITHUB_TOKEN = st.secrets["GITHUB_TOKEN"]
 ADMIN_PASSWORD = st.secrets["ADMIN_PASSWORD"]
 REPO_NAME = "Cubs-Capital/cubsAI-SAAS"
 BRANCH_NAME = "master"
-BLOG_PATH = "cubsAI/blog/docs"
+BLOG_PATH = "cubsAI/blog/docs/"
 CONFIG_PATH = "cubsAI/blog/astro.config.mjs"  # Path to the config file
 
 # Initialize GitHub client
