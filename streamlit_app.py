@@ -1,16 +1,29 @@
 import streamlit as st
 from github import Github
 from streamlit_ace import st_ace
+import json
+import yaml
 
 # Load secrets
 GITHUB_TOKEN = st.secrets["GITHUB_TOKEN"]
-REPO_NAME = "Cubs-Capital/cubsAI-SAAS"  # Your GitHub repository
-BRANCH_NAME = "master"  # Corrected to the actual branch name
-BLOG_PATH = "cubsAI/blog"  # Path to your blog folder
+ADMIN_PASSWORD = st.secrets["ADMIN_PASSWORD"]
+REPO_NAME = "Cubs-Capital/cubsAI-SAAS"
+BRANCH_NAME = "master"
+BLOG_PATH = "cubsAI/blog"
+CONFIG_PATH = "cubsAI/blog/astro.config.mjs"  # Path to the config file
 
 # Initialize GitHub client
 g = Github(GITHUB_TOKEN)
 repo = g.get_repo(REPO_NAME)
+
+def authenticate():
+    """Simple password-based authentication"""
+    password = st.sidebar.text_input("Enter Admin Password", type="password")
+    if password == ADMIN_PASSWORD:
+        return True
+    else:
+        st.sidebar.error("Invalid password")
+        return False
 
 def list_files_in_folder(path):
     """List files in the GitHub repo at a given path."""
@@ -57,16 +70,50 @@ def manage_blog_posts():
             repo.create_file(f"{BLOG_PATH}/{new_blog_name}", "Add new blog post", new_blog_content)
             st.success(f"New blog post {new_blog_name} created successfully.")
 
+def manage_config():
+    """Manage the Astro config file to adjust sidebar and blog settings."""
+    st.sidebar.subheader("Config File Management")
+    config_content = load_file_content(CONFIG_PATH)
+    
+    # Display config content in the editor
+    st.subheader("Editing Config File")
+    new_config_content = st_ace(value=config_content, language='javascript', theme='github', auto_update=True)
+    
+    if st.button("Save Config Changes"):
+        update_file_content(CONFIG_PATH, new_config_content, "Updated astro.config.mjs")
+        st.success("Config file updated successfully!")
+    
+    # Parse and display a visual representation of the config (for example, a sidebar preview)
+    config_data = yaml.safe_load(new_config_content)
+    st.sidebar.markdown("### Sidebar Preview")
+    display_sidebar_structure(config_data.get('integrations', []))
+
+def display_sidebar_structure(integrations):
+    """Display the sidebar structure visually from the config."""
+    for integration in integrations:
+        if 'starlight' in integration:
+            sidebar = integration['starlight'].get('sidebar', [])
+            for section in sidebar:
+                st.sidebar.markdown(f"**{section['label']}**")
+                for item in section['items']:
+                    st.sidebar.markdown(f"- {item['label']}")
+
 def main():
     st.title("THE Novak AI - Custom CMS")
     st.sidebar.title("CMS Navigation")
 
+    # Authentication
+    if not authenticate():
+        st.stop()
+
     # CMS Sections
-    sections = ["Manage Blog Posts"]
+    sections = ["Manage Blog Posts", "Manage Config File"]
     choice = st.sidebar.selectbox("Choose an action", sections)
 
     if choice == "Manage Blog Posts":
         manage_blog_posts()
+    elif choice == "Manage Config File":
+        manage_config()
 
 if __name__ == "__main__":
     main()
