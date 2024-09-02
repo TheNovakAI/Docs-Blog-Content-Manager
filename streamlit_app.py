@@ -49,6 +49,14 @@ def load_file_content(file_path):
     file_content = repo.get_contents(file_path, ref=BRANCH_NAME)
     return file_content.decoded_content.decode()
 
+def parse_yaml_content(content):
+    """Safely parse YAML content."""
+    try:
+        return yaml.safe_load(content)
+    except yaml.YAMLError as e:
+        st.error(f"YAML Parsing Error: {e}")
+        return None
+
 def update_file_content(file_path, new_content, commit_message="Update content"):
     """Update the content of a file in the GitHub repo."""
     file = repo.get_contents(file_path, ref=BRANCH_NAME)
@@ -82,8 +90,11 @@ def display_sidebar_structure(integrations, files, selected_file):
 def update_config_file(files):
     """Update the Astro config file based on the current file structure."""
     config_content = load_file_content(CONFIG_PATH)
-    config_data = yaml.safe_load(config_content)
+    config_data = parse_yaml_content(config_content)
     
+    if not config_data:
+        return  # If parsing fails, stop further execution
+
     # Update sidebar structure in the config
     new_sidebar_structure = []
     for file in files:
@@ -109,9 +120,10 @@ def manage_blog_posts():
     selected_file = [st.session_state.get('selected_file')]
 
     config_content = load_file_content(CONFIG_PATH)
-    config_data = yaml.safe_load(config_content)
+    config_data = parse_yaml_content(config_content)
     
-    display_sidebar_structure(config_data.get('integrations', []), files, selected_file)
+    if config_data:
+        display_sidebar_structure(config_data.get('integrations', []), files, selected_file)
     
     if selected_file[0]:
         display_editor(selected_file[0])
@@ -141,9 +153,10 @@ def manage_config():
         st.success("Config file updated successfully!")
     
     # Parse and display a visual representation of the config (for example, a sidebar preview)
-    config_data = yaml.safe_load(new_config_content)
-    st.sidebar.markdown("### Sidebar Preview")
-    display_sidebar_structure(config_data.get('integrations', []), [], [])
+    config_data = parse_yaml_content(new_config_content)
+    if config_data:
+        st.sidebar.markdown("### Sidebar Preview")
+        display_sidebar_structure(config_data.get('integrations', []), [], [])
 
 def main():
     st.title("THE Novak AI - Custom CMS")
