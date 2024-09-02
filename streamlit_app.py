@@ -71,20 +71,20 @@ def display_editor(file_path):
         update_file_content(file_path, new_content, f"Updated {file_path}")
         st.success(f"Updated {file_path} successfully!")
 
-def display_sidebar_structure(integrations, files, selected_file):
-    """Display the sidebar structure based on the config file."""
-    for integration in integrations:
-        if 'starlight' in integration:
-            sidebar = integration['starlight'].get('sidebar', [])
-            for section in sidebar:
-                st.sidebar.markdown(f"**{section['label']}**")
-                for item in section['items']:
-                    file_path = f"{BLOG_PATH}/{item['link'].strip('/')}.md"
-                    # Check if file path exists in repo files
-                    if any(file['path'] == file_path for file in files):
-                        if st.sidebar.button(f"📝 {item['label']}", key=item['link']):
-                            st.session_state['selected_file'] = file_path
-                            selected_file[0] = file_path
+def display_sidebar_structure(sidebar_content, files, selected_file):
+    """Display the sidebar structure extracted from the config file."""
+    try:
+        sidebar_items = eval(sidebar_content)
+        for section in sidebar_items:
+            st.sidebar.markdown(f"**{section['label']}**")
+            for item in section['items']:
+                file_path = f"{BLOG_PATH}/{item['link'].strip('/')}.md"
+                if any(file['path'] == file_path for file in files):
+                    if st.sidebar.button(f"📝 {item['label']}", key=item['link']):
+                        st.session_state['selected_file'] = file_path
+                        selected_file[0] = file_path
+    except SyntaxError:
+        st.error("Error in parsing sidebar content. Please check the configuration.")
 
 def manage_blog_posts():
     """Manage blog posts: add new or delete existing."""
@@ -93,12 +93,12 @@ def manage_blog_posts():
     selected_file = [st.session_state.get('selected_file')]
 
     js_content = load_file_content(CONFIG_PATH)
-    # Just locate the sidebar config for manual adjustments.
+    # Extract sidebar configuration using regex
     current_sidebar = re.search(r"sidebar:\s*(\[[^\]]*\])", js_content, re.DOTALL)
     
     if current_sidebar:
-        sidebar_config = current_sidebar.group(1)
-        display_sidebar_structure(eval(sidebar_config), files, selected_file)
+        sidebar_content = current_sidebar.group(1)
+        display_sidebar_structure(sidebar_content, files, selected_file)
     
     if selected_file[0]:
         display_editor(selected_file[0])
@@ -112,10 +112,9 @@ def manage_blog_posts():
             repo.create_file(new_blog_path, "Add new blog post", new_blog_content)
             st.success(f"New blog post {new_blog_name} created successfully.")
             
-            # Update the sidebar dynamically (assumes Python-like list)
-            new_sidebar = eval(sidebar_config)
-            new_sidebar.append({"label": new_blog_name.replace("-", " ").title(), "link": f"/{new_blog_name.replace('.md', '')}"})
-            updated_js_content = update_sidebar_config(js_content, new_sidebar)
+            # Update the sidebar dynamically as a plain string
+            new_sidebar_content = sidebar_content.rstrip(']') + f", {{'label': '{new_blog_name.replace('-', ' ').title()}', 'link': '/{new_blog_name.replace('.md', '')}'}}]"
+            updated_js_content = update_sidebar_config(js_content, new_sidebar_content)
             update_file_content(CONFIG_PATH, updated_js_content, "Updated astro.config.mjs with new sidebar structure")
 
 def manage_config():
