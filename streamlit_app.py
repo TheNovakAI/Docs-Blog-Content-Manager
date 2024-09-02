@@ -5,7 +5,7 @@ from streamlit_ace import st_ace
 # Load secrets
 GITHUB_TOKEN = st.secrets["GITHUB_TOKEN"]
 REPO_NAME = "Cubs-Capital/cubsAI-SAAS"  # Your GitHub repository
-BRANCH_NAME = "main"  # Branch to work with
+BRANCH_NAME = "master"  # Corrected to the actual branch name
 BLOG_PATH = "cubsAI/blog"  # Path to your blog folder
 
 # Initialize GitHub client
