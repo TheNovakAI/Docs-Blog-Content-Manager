@@ -1,7 +1,6 @@
 import streamlit as st
 from github import Github
 from streamlit_ace import st_ace
-import json
 import yaml
 
 # Load secrets
@@ -65,15 +64,20 @@ def display_editor(file_path):
         update_file_content(file_path, new_content, f"Updated {file_path}")
         st.success(f"Updated {file_path} successfully!")
 
-def display_sidebar_structure(files):
-    """Display the file structure in a sidebar."""
-    for file in files:
-        if file["type"] == "dir":
-            if st.sidebar.button(f"📂 {file['name']}"):
-                display_sidebar_structure(file["children"])
-        else:
-            if st.sidebar.button(f"📝 {file['name']}"):
-                display_editor(file["path"])
+def display_sidebar_structure(integrations, files, selected_file):
+    """Display the sidebar structure based on the config file."""
+    for integration in integrations:
+        if 'starlight' in integration:
+            sidebar = integration['starlight'].get('sidebar', [])
+            for section in sidebar:
+                st.sidebar.markdown(f"**{section['label']}**")
+                for item in section['items']:
+                    file_path = f"{BLOG_PATH}/{item['link'].strip('/')}.md"
+                    # Check if file path exists in repo files
+                    if any(file['path'] == file_path for file in files):
+                        if st.sidebar.button(f"📝 {item['label']}", key=item['link']):
+                            st.session_state['selected_file'] = file_path
+                            selected_file[0] = file_path
 
 def update_config_file(files):
     """Update the Astro config file based on the current file structure."""
@@ -102,7 +106,15 @@ def manage_blog_posts():
     """Manage blog posts: add new or delete existing."""
     st.sidebar.subheader("Blog Post Management")
     files = list_files_in_folder(BLOG_PATH)
-    display_sidebar_structure(files)
+    selected_file = [st.session_state.get('selected_file')]
+
+    config_content = load_file_content(CONFIG_PATH)
+    config_data = yaml.safe_load(config_content)
+    
+    display_sidebar_structure(config_data.get('integrations', []), files, selected_file)
+    
+    if selected_file[0]:
+        display_editor(selected_file[0])
     
     if st.sidebar.button("Add New Blog Post"):
         new_blog_name = st.sidebar.text_input("New Blog Filename", "new-blog.md")
@@ -131,7 +143,7 @@ def manage_config():
     # Parse and display a visual representation of the config (for example, a sidebar preview)
     config_data = yaml.safe_load(new_config_content)
     st.sidebar.markdown("### Sidebar Preview")
-    display_sidebar_structure(config_data.get('integrations', []))
+    display_sidebar_structure(config_data.get('integrations', []), [], [])
 
 def main():
     st.title("THE Novak AI - Custom CMS")
@@ -140,6 +152,10 @@ def main():
     # Authentication
     if not authenticate():
         st.stop()
+
+    # Initialize session state
+    if 'selected_file' not in st.session_state:
+        st.session_state['selected_file'] = None
 
     # CMS Sections
     sections = ["Manage Blog Posts", "Manage Config File"]
