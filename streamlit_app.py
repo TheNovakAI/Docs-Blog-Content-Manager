@@ -52,7 +52,8 @@ def load_file_content(file_path):
 def update_sidebar_config(js_content, new_sidebar):
     """Update the sidebar configuration in the JavaScript file."""
     new_sidebar_str = f"sidebar: {new_sidebar}"
-    updated_js_content = re.sub(r"sidebar:\s*\[.*?\]", new_sidebar_str, js_content, flags=re.DOTALL)
+    # Ensure that we correctly match and replace the existing sidebar configuration
+    updated_js_content = re.sub(r"sidebar:\s*\[[^\]]*\]", new_sidebar_str, js_content, flags=re.DOTALL)
     return updated_js_content
 
 def update_file_content(file_path, new_content, commit_message="Update content"):
@@ -93,7 +94,7 @@ def manage_blog_posts():
 
     js_content = load_file_content(CONFIG_PATH)
     # Just locate the sidebar config for manual adjustments.
-    current_sidebar = re.search(r"sidebar:\s*(\[.*?\])", js_content, re.DOTALL)
+    current_sidebar = re.search(r"sidebar:\s*(\[[^\]]*\])", js_content, re.DOTALL)
     
     if current_sidebar:
         sidebar_config = current_sidebar.group(1)
