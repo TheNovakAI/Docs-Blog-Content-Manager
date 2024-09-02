@@ -1,7 +1,6 @@
 import streamlit as st
 from github import Github
 from streamlit_ace import st_ace
-import json
 import re
 
 # Load secrets
@@ -50,29 +49,11 @@ def load_file_content(file_path):
     file_content = repo.get_contents(file_path, ref=BRANCH_NAME)
     return file_content.decoded_content.decode()
 
-def extract_config(js_content):
-    """Extract the JSON-like configuration object from the JavaScript file."""
-    config_match = re.search(r"export\s+default\s+defineConfig\((\{.*?\})\);", js_content, re.DOTALL)
-    if config_match:
-        config_json_str = config_match.group(1)
-        # Convert to valid JSON format
-        config_json_str = config_json_str.replace("'", '"')
-        config_json_str = re.sub(r"(\w+):", r'"\1":', config_json_str)  # Convert keys to string format
-        try:
-            config_data = json.loads(config_json_str)
-            return config_data
-        except json.JSONDecodeError as e:
-            st.error(f"JSON Decoding Error: {e}")
-            return None
-    else:
-        st.error("No valid config found in the JavaScript file.")
-        return None
-
-def update_config_file(js_content, new_config):
-    """Update the JavaScript file with the new configuration."""
-    new_config_str = json.dumps(new_config, indent=2)
-    new_js_content = re.sub(r"(export\s+default\s+defineConfig\()\{.*?\}(\);)", fr"\1{new_config_str}\2", js_content, flags=re.DOTALL)
-    return new_js_content
+def update_sidebar_config(js_content, new_sidebar):
+    """Update the sidebar configuration in the JavaScript file."""
+    new_sidebar_str = f"sidebar: {new_sidebar}"
+    updated_js_content = re.sub(r"sidebar:\s*\[.*?\]", new_sidebar_str, js_content, flags=re.DOTALL)
+    return updated_js_content
 
 def update_file_content(file_path, new_content, commit_message="Update content"):
     """Update the content of a file in the GitHub repo."""
@@ -111,10 +92,12 @@ def manage_blog_posts():
     selected_file = [st.session_state.get('selected_file')]
 
     js_content = load_file_content(CONFIG_PATH)
-    config_data = extract_config(js_content)
+    # Just locate the sidebar config for manual adjustments.
+    current_sidebar = re.search(r"sidebar:\s*(\[.*?\])", js_content, re.DOTALL)
     
-    if config_data:
-        display_sidebar_structure(config_data.get('integrations', []), files, selected_file)
+    if current_sidebar:
+        sidebar_config = current_sidebar.group(1)
+        display_sidebar_structure(eval(sidebar_config), files, selected_file)
     
     if selected_file[0]:
         display_editor(selected_file[0])
@@ -127,8 +110,11 @@ def manage_blog_posts():
             new_blog_path = f"{BLOG_PATH}/{new_blog_name}"
             repo.create_file(new_blog_path, "Add new blog post", new_blog_content)
             st.success(f"New blog post {new_blog_name} created successfully.")
-            files.append({"type": "file", "path": new_blog_path, "name": new_blog_name})
-            updated_js_content = update_config_file(js_content, config_data)
+            
+            # Update the sidebar dynamically (assumes Python-like list)
+            new_sidebar = eval(sidebar_config)
+            new_sidebar.append({"label": new_blog_name.replace("-", " ").title(), "link": f"/{new_blog_name.replace('.md', '')}"})
+            updated_js_content = update_sidebar_config(js_content, new_sidebar)
             update_file_content(CONFIG_PATH, updated_js_content, "Updated astro.config.mjs with new sidebar structure")
 
 def manage_config():
