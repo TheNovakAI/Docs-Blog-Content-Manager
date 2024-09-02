@@ -53,7 +53,7 @@ def update_sidebar_config(js_content, new_sidebar):
     """Update the sidebar configuration in the JavaScript file."""
     new_sidebar_str = f"sidebar: {new_sidebar}"
     # Ensure that we correctly match and replace the existing sidebar configuration
-    updated_js_content = re.sub(r"sidebar:\s*\[[^\]]*\]", new_sidebar_str, js_content, flags=re.DOTALL)
+    updated_js_content = re.sub(r"sidebar:\s*\[.*?\]", new_sidebar_str, js_content, flags=re.DOTALL)
     return updated_js_content
 
 def update_file_content(file_path, new_content, commit_message="Update content"):
@@ -73,18 +73,23 @@ def display_editor(file_path):
 
 def display_sidebar_structure(sidebar_content, files, selected_file):
     """Display the sidebar structure extracted from the config file."""
-    try:
-        sidebar_items = eval(sidebar_content)
-        for section in sidebar_items:
-            st.sidebar.markdown(f"**{section['label']}**")
-            for item in section['items']:
-                file_path = f"{BLOG_PATH}/{item['link'].strip('/')}.md"
-                if any(file['path'] == file_path for file in files):
-                    if st.sidebar.button(f"📝 {item['label']}", key=item['link']):
-                        st.session_state['selected_file'] = file_path
-                        selected_file[0] = file_path
-    except SyntaxError:
-        st.error("Error in parsing sidebar content. Please check the configuration.")
+    # Handle sidebar content as a string and safely split it into sections
+    sections = re.findall(r"{\s*'label':\s*'[^']*',\s*'items':\s*\[.*?\]\s*}", sidebar_content, re.DOTALL)
+    
+    for section in sections:
+        # Extract label and items for each section
+        label_match = re.search(r"'label':\s*'([^']*)'", section)
+        items_match = re.findall(r"{\s*'label':\s*'([^']*)',\s*'link':\s*'([^']*)'\s*}", section)
+        
+        if label_match:
+            st.sidebar.markdown(f"**{label_match.group(1)}**")
+        
+        for item_label, item_link in items_match:
+            file_path = f"{BLOG_PATH}/{item_link.strip('/')}.md"
+            if any(file['path'] == file_path for file in files):
+                if st.sidebar.button(f"📝 {item_label}", key=item_link):
+                    st.session_state['selected_file'] = file_path
+                    selected_file[0] = file_path
 
 def manage_blog_posts():
     """Manage blog posts: add new or delete existing."""
