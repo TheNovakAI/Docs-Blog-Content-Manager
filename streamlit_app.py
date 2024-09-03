@@ -42,6 +42,16 @@ def list_files_in_folder(path):
             })
     return files
 
+def get_all_folders(files, parent_key=""):
+    """Get all folder paths for dropdown."""
+    folders = []
+    for file in files:
+        if file["type"] == "dir":
+            folders.append(file["path"])
+            # Recursively add subfolders
+            folders.extend(get_all_folders(file["children"], parent_key=file["path"]))
+    return folders
+
 def display_sidebar_structure(files, parent_key=""):
     """Display the file structure in the sidebar with buttons for interaction."""
     for file in files:
@@ -69,17 +79,20 @@ def display_editor(file_path):
     """Display an editor to modify the content of a file."""
     st.subheader(f"Editing: {file_path}")
     
+    # Only one editor box for editing content
     if 'file_content' in st.session_state:
         new_content = st_ace(
             value=st.session_state['file_content'], 
             language='markdown', 
             theme='github', 
-            auto_update=False
+            auto_update=False,  # Prevent updating on every keystroke
+            key="editor"
         )
 
         if st.button("Save Changes"):
             update_file_content(file_path, new_content, f"Updated {file_path}")
             st.success(f"Updated {file_path} successfully!")
+            st.session_state['file_content'] = new_content  # Update content in session state
 
 def manage_docs():
     """Manage the docs files: add or edit existing files."""
@@ -96,6 +109,11 @@ def manage_docs():
     # Add new file option
     st.sidebar.markdown("---")
     st.sidebar.subheader("Add New Markdown File")
+    
+    # Get all folders for dropdown
+    all_folders = get_all_folders(files)
+    selected_folder = st.sidebar.selectbox("Select Folder", all_folders)
+
     new_file_name = st.sidebar.text_input("New File Name", "new-file.md")
     new_file_title = st.sidebar.text_input("Title", "New Title")
     new_file_description = st.sidebar.text_input("Description", "New Description")
@@ -108,10 +126,10 @@ def manage_docs():
         front_matter = f"---\ntitle: {new_file_title}\ndescription: {new_file_description}\n---\n\n"
         complete_content = front_matter + new_file_content
 
-        new_file_path = f"{DOCS_PATH}/{new_file_name}"
+        new_file_path = f"{selected_folder}/{new_file_name}"
         try:
             repo.create_file(new_file_path, "Add new markdown file", complete_content)
-            st.success(f"New file {new_file_name} created successfully.")
+            st.success(f"New file {new_file_name} created successfully in {selected_folder}.")
             st.session_state['selected_file'] = new_file_path  # Automatically select the new file for editing
             st.session_state['file_content'] = complete_content
         except Exception as e:
