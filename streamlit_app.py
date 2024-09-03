@@ -52,6 +52,7 @@ def display_sidebar_structure(files, parent_key=""):
             file_key = f"{parent_key}/{file['name']}"
             if st.sidebar.button(f"📝 Edit {file['name']}", key=file_key):
                 st.session_state['selected_file'] = file["path"]
+                st.session_state['file_content'] = load_file_content(file["path"])
 
 def load_file_content(file_path):
     """Load the content of a file from the GitHub repo."""
@@ -66,12 +67,18 @@ def update_file_content(file_path, new_content, commit_message="Update content")
 def display_editor(file_path):
     """Display an editor to modify the content of a file."""
     st.subheader(f"Editing: {file_path}")
-    current_content = load_file_content(file_path)
-    new_content = st_ace(value=current_content, language='markdown', theme='github', auto_update=True)
     
-    if st.button("Save Changes"):
-        update_file_content(file_path, new_content, f"Updated {file_path}")
-        st.success(f"Updated {file_path} successfully!")
+    if 'file_content' in st.session_state:
+        new_content = st_ace(
+            value=st.session_state['file_content'], 
+            language='markdown', 
+            theme='github', 
+            auto_update=False
+        )
+
+        if st.button("Save Changes"):
+            update_file_content(file_path, new_content, f"Updated {file_path}")
+            st.success(f"Updated {file_path} successfully!")
 
 def manage_docs():
     """Manage the docs files: add or edit existing files."""
@@ -91,7 +98,7 @@ def manage_docs():
     new_file_name = st.sidebar.text_input("New File Name", "new-file.md")
     new_file_title = st.sidebar.text_input("Title", "New Title")
     new_file_description = st.sidebar.text_input("Description", "New Description")
-    new_file_content = st_ace(language='markdown', theme='github', placeholder="Write your markdown content here...")
+    new_file_content = st_ace(language='markdown', theme='github', placeholder="Write your markdown content here...", auto_update=False)
     
     if st.sidebar.button("Create File"):
         # Add front matter (YAML) for title and description
@@ -103,6 +110,7 @@ def manage_docs():
             repo.create_file(new_file_path, "Add new markdown file", complete_content)
             st.success(f"New file {new_file_name} created successfully.")
             st.session_state['selected_file'] = new_file_path  # Automatically select the new file for editing
+            st.session_state['file_content'] = complete_content
         except Exception as e:
             st.error(f"Error creating file: {e}")
 
@@ -117,6 +125,8 @@ def main():
     # Initialize session state
     if 'selected_file' not in st.session_state:
         st.session_state['selected_file'] = None
+    if 'file_content' not in st.session_state:
+        st.session_state['file_content'] = None
 
     # Manage docs files
     manage_docs()
