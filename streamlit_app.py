@@ -15,11 +15,11 @@ repo = g.get_repo(REPO_NAME)
 
 def authenticate():
     """Simple password-based authentication."""
-    password = st.sidebar.text_input("Enter Admin Password", type="password")
+    password = st.text_input("Enter Admin Password", type="password")
     if password == ADMIN_PASSWORD:
         return True
     else:
-        st.sidebar.error("Invalid password")
+        st.error("Invalid password")
         return False
 
 def list_files_in_folder(path):
@@ -42,26 +42,16 @@ def list_files_in_folder(path):
             })
     return files
 
-def get_all_folders(files, parent_key=""):
-    """Get all folder paths for dropdown."""
-    folders = []
-    for file in files:
-        if file["type"] == "dir":
-            folders.append(file["path"])
-            # Recursively add subfolders
-            folders.extend(get_all_folders(file["children"], parent_key=file["path"]))
-    return folders
-
-def display_sidebar_structure(files, parent_key=""):
-    """Display the file structure in the sidebar with buttons for interaction."""
+def render_tree_view(files, parent_key=""):
+    """Display the file structure in a tree view format."""
     for file in files:
         if file["type"] == "dir":
             # Use expander to show directories
-            with st.sidebar.expander(f"📁 {file['name']}", expanded=False):
-                display_sidebar_structure(file["children"], parent_key=file["path"])
+            with st.expander(f"📁 {file['name']}"):
+                render_tree_view(file["children"], parent_key=file["path"])
         else:
             file_key = f"{parent_key}/{file['name']}"
-            if st.sidebar.button(f"📝 Edit {file['name']}", key=file_key):
+            if st.button(f"📝 Edit {file['name']}", key=file_key):
                 st.session_state['selected_file'] = file["path"]
                 st.session_state['file_content'] = load_file_content(file["path"])
 
@@ -75,16 +65,17 @@ def update_file_content(file_path, new_content, commit_message="Update content")
     file = repo.get_contents(file_path, ref=BRANCH_NAME)
     repo.update_file(file.path, commit_message, new_content, file.sha, branch=BRANCH_NAME)
 
-def display_editor(file_path):
-    """Display an editor to modify the content of a file."""
-    st.subheader(f"Editing: {file_path}")
-    
-    # Only one editor box for editing content
-    if 'file_content' in st.session_state:
+def file_editor_area():
+    """Editor area for modifying the content of a file."""
+    if 'selected_file' in st.session_state:
+        file_path = st.session_state['selected_file']
+        st.subheader(f"Editing: {file_path}")
+        
+        # Single editor box for content editing
         new_content = st_ace(
-            value=st.session_state['file_content'], 
-            language='markdown', 
-            theme='github', 
+            value=st.session_state['file_content'],
+            language='markdown',
+            theme='github',
             auto_update=False,  # Prevent updating on every keystroke
             key="editor"
         )
@@ -94,34 +85,21 @@ def display_editor(file_path):
             st.success(f"Updated {file_path} successfully!")
             st.session_state['file_content'] = new_content  # Update content in session state
 
-def manage_docs():
-    """Manage the docs files: add or edit existing files."""
-    st.sidebar.subheader("Docs Management")
+def add_new_file_area():
+    """Area to add a new file to the repository."""
+    st.subheader("Add New Markdown File")
+
+    # List all folders for dropdown
     files = list_files_in_folder(DOCS_PATH)
+    all_folders = [file['path'] for file in files if file['type'] == 'dir']
+    selected_folder = st.selectbox("Select Folder", all_folders)
 
-    # Display the file structure
-    display_sidebar_structure(files)
-
-    # Handle selected file for editing
-    if 'selected_file' in st.session_state and st.session_state['selected_file']:
-        display_editor(st.session_state['selected_file'])
-
-    # Add new file option
-    st.sidebar.markdown("---")
-    st.sidebar.subheader("Add New Markdown File")
-    
-    # Get all folders for dropdown
-    all_folders = get_all_folders(files)
-    selected_folder = st.sidebar.selectbox("Select Folder", all_folders)
-
-    new_file_name = st.sidebar.text_input("New File Name", "new-file.md")
-    new_file_title = st.sidebar.text_input("Title", "New Title")
-    new_file_description = st.sidebar.text_input("Description", "New Description")
-    
-    # Content for new file
+    new_file_name = st.text_input("New File Name", "new-file.md")
+    new_file_title = st.text_input("Title", "New Title")
+    new_file_description = st.text_input("Description", "New Description")
     new_file_content = st.text_area("Content", "Write your markdown content here...")
 
-    if st.sidebar.button("Create File"):
+    if st.button("Create File"):
         # Add front matter (YAML) for title and description
         front_matter = f"---\ntitle: {new_file_title}\ndescription: {new_file_description}\n---\n\n"
         complete_content = front_matter + new_file_content
@@ -137,7 +115,6 @@ def manage_docs():
 
 def main():
     st.title("THE Novak AI - Custom CMS")
-    st.sidebar.title("CMS Navigation")
 
     # Authentication
     if not authenticate():
@@ -149,8 +126,17 @@ def main():
     if 'file_content' not in st.session_state:
         st.session_state['file_content'] = None
 
-    # Manage docs files
-    manage_docs()
+    # Display the file tree view
+    st.subheader("File Tree")
+    files = list_files_in_folder(DOCS_PATH)
+    render_tree_view(files)
+
+    # Editor area
+    file_editor_area()
+
+    # Area to add a new file
+    st.markdown("---")
+    add_new_file_area()
 
 if __name__ == "__main__":
     main()
