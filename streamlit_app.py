@@ -1,22 +1,20 @@
 import streamlit as st
 from github import Github
 from streamlit_ace import st_ace
-import re
 
 # Load secrets
 GITHUB_TOKEN = st.secrets["GITHUB_TOKEN"]
 ADMIN_PASSWORD = st.secrets["ADMIN_PASSWORD"]
 REPO_NAME = "Cubs-Capital/cubsAI-SAAS"
 BRANCH_NAME = "master"
-BLOG_PATH = "cubsAI/blog/src/content/docs"
-CONFIG_PATH = "cubsAI/blog/astro.config.mjs"  # Path to the config file
+DOCS_PATH = "cubsAI/blog/src/content/docs"  # Path to your docs directory
 
 # Initialize GitHub client
 g = Github(GITHUB_TOKEN)
 repo = g.get_repo(REPO_NAME)
 
 def authenticate():
-    """Simple password-based authentication"""
+    """Simple password-based authentication."""
     password = st.sidebar.text_input("Enter Admin Password", type="password")
     if password == ADMIN_PASSWORD:
         return True
@@ -44,17 +42,21 @@ def list_files_in_folder(path):
             })
     return files
 
+def display_sidebar_structure(files, parent_key=""):
+    """Display the file structure in the sidebar with buttons for interaction."""
+    for file in files:
+        if file["type"] == "dir":
+            with st.sidebar.expander(f"📁 {file['name']}"):
+                display_sidebar_structure(file["children"], parent_key=file["path"])
+        else:
+            file_key = f"{parent_key}/{file['name']}"
+            if st.sidebar.button(f"📝 Edit {file['name']}", key=file_key):
+                st.session_state['selected_file'] = file["path"]
+
 def load_file_content(file_path):
     """Load the content of a file from the GitHub repo."""
     file_content = repo.get_contents(file_path, ref=BRANCH_NAME)
     return file_content.decoded_content.decode()
-
-def update_sidebar_config(js_content, new_sidebar):
-    """Update the sidebar configuration in the JavaScript file."""
-    new_sidebar_str = f"sidebar: {new_sidebar}"
-    # Ensure that we correctly match and replace the existing sidebar configuration
-    updated_js_content = re.sub(r"sidebar:\s*\[.*?\]", new_sidebar_str, js_content, flags=re.DOTALL)
-    return updated_js_content
 
 def update_file_content(file_path, new_content, commit_message="Update content"):
     """Update the content of a file in the GitHub repo."""
@@ -71,69 +73,38 @@ def display_editor(file_path):
         update_file_content(file_path, new_content, f"Updated {file_path}")
         st.success(f"Updated {file_path} successfully!")
 
-def display_sidebar_structure(sidebar_content, files, selected_file):
-    """Display the sidebar structure extracted from the config file."""
-    # Handle sidebar content as a string and safely split it into sections
-    sections = re.findall(r"{\s*'label':\s*'[^']*',\s*'items':\s*\[.*?\]\s*}", sidebar_content, re.DOTALL)
-    
-    for section in sections:
-        # Extract label and items for each section
-        label_match = re.search(r"'label':\s*'([^']*)'", section)
-        items_match = re.findall(r"{\s*'label':\s*'([^']*)',\s*'link':\s*'([^']*)'\s*}", section)
-        
-        if label_match:
-            st.sidebar.markdown(f"**{label_match.group(1)}**")
-        
-        for item_label, item_link in items_match:
-            file_path = f"{BLOG_PATH}/{item_link.strip('/')}.md"
-            if any(file['path'] == file_path for file in files):
-                if st.sidebar.button(f"📝 {item_label}", key=item_link):
-                    st.session_state['selected_file'] = file_path
-                    selected_file[0] = file_path
+def manage_docs():
+    """Manage the docs files: add or edit existing files."""
+    st.sidebar.subheader("Docs Management")
+    files = list_files_in_folder(DOCS_PATH)
 
-def manage_blog_posts():
-    """Manage blog posts: add new or delete existing."""
-    st.sidebar.subheader("Blog Post Management")
-    files = list_files_in_folder(BLOG_PATH)
-    selected_file = [st.session_state.get('selected_file')]
+    # Display the file structure
+    display_sidebar_structure(files)
 
-    js_content = load_file_content(CONFIG_PATH)
-    # Extract sidebar configuration using regex
-    current_sidebar = re.search(r"sidebar:\s*(\[[^\]]*\])", js_content, re.DOTALL)
-    
-    if current_sidebar:
-        sidebar_content = current_sidebar.group(1)
-        display_sidebar_structure(sidebar_content, files, selected_file)
-    
-    if selected_file[0]:
-        display_editor(selected_file[0])
-    
-    if st.sidebar.button("Add New Blog Post"):
-        new_blog_name = st.sidebar.text_input("New Blog Filename", "new-blog.md")
-        new_blog_content = st_ace(language='markdown', theme='github')
-        
-        if st.sidebar.button("Create Blog Post"):
-            new_blog_path = f"{BLOG_PATH}/{new_blog_name}"
-            repo.create_file(new_blog_path, "Add new blog post", new_blog_content)
-            st.success(f"New blog post {new_blog_name} created successfully.")
-            
-            # Update the sidebar dynamically as a plain string
-            new_sidebar_content = sidebar_content.rstrip(']') + f", {{'label': '{new_blog_name.replace('-', ' ').title()}', 'link': '/{new_blog_name.replace('.md', '')}'}}]"
-            updated_js_content = update_sidebar_config(js_content, new_sidebar_content)
-            update_file_content(CONFIG_PATH, updated_js_content, "Updated astro.config.mjs with new sidebar structure")
+    # Handle selected file for editing
+    if 'selected_file' in st.session_state and st.session_state['selected_file']:
+        display_editor(st.session_state['selected_file'])
 
-def manage_config():
-    """Manage the Astro config file to adjust sidebar and blog settings."""
-    st.sidebar.subheader("Config File Management")
-    js_content = load_file_content(CONFIG_PATH)
+    # Add new file option
+    st.sidebar.markdown("---")
+    st.sidebar.subheader("Add New Markdown File")
+    new_file_name = st.sidebar.text_input("New File Name", "new-file.md")
+    new_file_title = st.sidebar.text_input("Title", "New Title")
+    new_file_description = st.sidebar.text_input("Description", "New Description")
+    new_file_content = st_ace(language='markdown', theme='github', placeholder="Write your markdown content here...")
     
-    # Display config content in the editor
-    st.subheader("Editing Config File")
-    new_js_content = st_ace(value=js_content, language='javascript', theme='github', auto_update=True)
-    
-    if st.button("Save Config Changes"):
-        update_file_content(CONFIG_PATH, new_js_content, "Updated astro.config.mjs")
-        st.success("Config file updated successfully!")
+    if st.sidebar.button("Create File"):
+        # Add front matter (YAML) for title and description
+        front_matter = f"---\ntitle: {new_file_title}\ndescription: {new_file_description}\n---\n\n"
+        complete_content = front_matter + new_file_content
+
+        new_file_path = f"{DOCS_PATH}/{new_file_name}"
+        try:
+            repo.create_file(new_file_path, "Add new markdown file", complete_content)
+            st.success(f"New file {new_file_name} created successfully.")
+            st.session_state['selected_file'] = new_file_path  # Automatically select the new file for editing
+        except Exception as e:
+            st.error(f"Error creating file: {e}")
 
 def main():
     st.title("THE Novak AI - Custom CMS")
@@ -147,14 +118,8 @@ def main():
     if 'selected_file' not in st.session_state:
         st.session_state['selected_file'] = None
 
-    # CMS Sections
-    sections = ["Manage Blog Posts", "Manage Config File"]
-    choice = st.sidebar.selectbox("Choose an action", sections)
-
-    if choice == "Manage Blog Posts":
-        manage_blog_posts()
-    elif choice == "Manage Config File":
-        manage_config()
+    # Manage docs files
+    manage_docs()
 
 if __name__ == "__main__":
     main()
