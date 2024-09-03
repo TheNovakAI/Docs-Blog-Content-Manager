@@ -46,7 +46,8 @@ def display_sidebar_structure(files, parent_key=""):
     """Display the file structure in the sidebar with buttons for interaction."""
     for file in files:
         if file["type"] == "dir":
-            with st.sidebar.expander(f"📁 {file['name']}"):
+            # Use expander to show directories
+            with st.sidebar.expander(f"📁 {file['name']}", expanded=False):
                 display_sidebar_structure(file["children"], parent_key=file["path"])
         else:
             file_key = f"{parent_key}/{file['name']}"
@@ -98,8 +99,10 @@ def manage_docs():
     new_file_name = st.sidebar.text_input("New File Name", "new-file.md")
     new_file_title = st.sidebar.text_input("Title", "New Title")
     new_file_description = st.sidebar.text_input("Description", "New Description")
-    new_file_content = st_ace(language='markdown', theme='github', placeholder="Write your markdown content here...", auto_update=False)
     
+    # Content for new file
+    new_file_content = st.text_area("Content", "Write your markdown content here...")
+
     if st.sidebar.button("Create File"):
         # Add front matter (YAML) for title and description
         front_matter = f"---\ntitle: {new_file_title}\ndescription: {new_file_description}\n---\n\n"
